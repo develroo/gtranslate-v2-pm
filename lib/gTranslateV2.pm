@@ -4,6 +4,7 @@ package GTranslateV2;
 # *************************************************************************************
 #
 # GTranslateV2.pm is a Perl module to interact with the GTranslate API v2.
+# NOTE: You can send up to 128 strings to any of the methods. Pass strings as an array REFERENCE.
 #
 # usage:
 # use GTranslateV2;
@@ -28,7 +29,7 @@ package GTranslateV2;
 
 
 our $VERSION = '0.1';
-our $debug = 0; # set to 1 for debugging mode.
+our $debug = 0; # set to 1 for debugging mode, which will activate certain status messages, etc.
 
 
 use warnings;
@@ -43,10 +44,11 @@ our $EXPORT = qw~~; # stuff to export when we're done.
 
 
 # basic configuration stuff
-use constant BASE_URL => 'https://www.googleapis.com/language/translate/v2';
-use constant DEFAULT_TARGET_LANGUAGE => 'en';
-use constant INSUFFICIENT_STRINGS_MESSAGE => qq~You didn\'t send anything to translate!~;
-use constant TOO_MANY_QUERY_STRINGS_MESSAGE => qq~You may only send up to 128 strings to translate.~;
+use constant BASE_URL => 'https://www.googleapis.com/language/translate/v2'; # base url for the api
+use constant DEFAULT_TARGET_LANGUAGE => 'en'; # default destination language
+use constant INSUFFICIENT_STRINGS_MESSAGE => qq~You didn\'t send anything to translate!~; # error message for if we don't have any strings to process
+use constant TOO_MANY_QUERY_STRINGS_MESSAGE => qq~You may only send up to 128 strings to translate.~; # error message for if we have too many strings to process.
+use constant DEFAULT_STRING_FORMAT => 'text'; # set the default text format to text. This can be overridden by sending the format argument to the methods
 # end basic configuration stuff
 
 
@@ -77,6 +79,7 @@ sub translate{ # run a translation
   my $queryParams = { # set up the hash of params we'll need
     key => $self->{key},
     target => (gtg($args{target})) ? $args{target} : DEFAULT_TARGET_LANGUAGE,
+    'format' => DEFAULT_STRING_FORMAT,
     q => $args{q}
   };
   foreach my $param (qw~prettyprint format source~) {
@@ -105,7 +108,7 @@ sub translate{ # run a translation
 
 
 
-sub detect{
+sub detect{ # detect the language of given strings
   my $self = shift;
   my %args = @_;
   
@@ -115,6 +118,7 @@ sub detect{
   
   my $queryParams = { # set up the hash of params we'll need
     key => $self->{key},
+    'format' => DEFAULT_STRING_FORMAT,
     q => $args{q}
   };
   foreach my $param (qw~prettyprint~) {
