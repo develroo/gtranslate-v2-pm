@@ -28,7 +28,7 @@ package GTranslateV2;
 # *************************************************************************************
 
 
-our $VERSION = '0.1';
+use version 0.77; our $VERSION = qv("v0.1_3");
 our $debug = 0; # set to 1 for debugging mode, which will activate certain status messages, etc.
 
 
@@ -36,8 +36,14 @@ use warnings;
 use strict;
 use LWP::UserAgent; # We'll use this to talk to the GServers
 use JSON; # We'll use this to process the JSON responses
-use URI::Escape; # We'll need this to pass arguments and such.
-use Data::Dumper;
+if($debug){
+  eval{
+    use Data::Dumper;
+  };
+  if($@ ne ''){
+    warn "Unable to include Data::Dumper!\n";
+  }
+}
 
 use base 'Exporter';
 our $EXPORT = qw~~; # stuff to export when we're done.
@@ -68,12 +74,22 @@ sub new{ # initialize the translator
 
 
 
+# *************************************************************************************
+#
+# Usage:
+# my @translations = $translator->translate( q => \@stringsToTranslate, target => $destLang, source => $srcLang, 'format' => $stringFormat );
+#
+# *************************************************************************************
+
 sub translate{ # run a translation
   my $self = shift;
   my %args = @_;
   
-  if(my $badNumOfStrings = checkForStrings(@{$args{q}})){ # check to make sure we have something - but not too much - to translate
-    return $badNumOfStrings;
+  $self->{error} = undef; # reset the error object
+  
+  if(my $badNumOfStrings = checkForStrings($args{q})){ # check to make sure we have something - but not too much - to translate
+    $self->{error} = $badNumOfStrings;
+    return undef;
   }
   
   my $queryParams = { # set up the hash of params we'll need
@@ -87,33 +103,50 @@ sub translate{ # run a translation
       $queryParams->{$param} = $args{param};
     }
   }
-    
+      
   my $json;
   my $response = $self->{ua}->post(BASE_URL, $queryParams); # send and receive the translation
   eval {
     $json = from_json($response->decoded_content);
   };
-  if(($debug) || ($@ ne '') || (defined($json->{error}))){ # in case of error, vomit whatever we got back
+  if(($debug) || ($@ ne '')){ # in case of error, vomit whatever we got back
    warn qq~\n================ TRANSLATE ERROR ================\n\n~ . $response->decoded_content . qq~\n\n============== END TRANSLATE ERROR ==============\n~;
   }
   
   if($debug){
     print Dumper(\%args, $queryParams, $json);
   }
-  
-  return $json; # return our constructed object
+
+  if(defined($json->{error})){ # if we have an error message, let's make it accessible
+    $self->{error} = $json->{error};
+  }
+  if((defined($json->{data})) && (defined($json->{data}->{translations}))){ # if we have translations, let's return them as an array
+    return @{$json->{data}->{translations}};
+  }else{
+    return undef;
+  }
 }
 
 
 
 
 
+# *************************************************************************************
+#
+# Usage:
+# my @detections = $translator->detect( q => \@stringsToDetect, 'format' => $stringFormat );
+#
+# *************************************************************************************
+
 sub detect{ # detect the language of given strings
   my $self = shift;
   my %args = @_;
   
-  if(my $badNumOfStrings = checkForStrings(@{$args{q}})){ # check to make sure we have something - but not too much - to translate
-    return $badNumOfStrings;
+  $self->{error} = undef; # reset the error object
+  
+  if(my $badNumOfStrings = checkForStrings($args{q})){ # check to make sure we have something - but not too much - to translate
+    $self->{error} = $badNumOfStrings;
+    return undef;
   }
   
   my $queryParams = { # set up the hash of params we'll need
@@ -121,7 +154,7 @@ sub detect{ # detect the language of given strings
     'format' => DEFAULT_STRING_FORMAT,
     q => $args{q}
   };
-  foreach my $param (qw~prettyprint~) {
+  foreach my $param (qw~prettyprint format~) {
     if(gtg($args{$param})) {
       $queryParams->{$param} = $args{param};
     }
@@ -132,7 +165,7 @@ sub detect{ # detect the language of given strings
   eval {
     $json = from_json($response->decoded_content);
   };
-  if(($debug) || ($@ ne '') || (defined($json->{error}))){ # in case of error, vomit whatever we got back
+  if(($debug) || ($@ ne '')){ # in case of error, vomit whatever we got back
     warn qq~\n================ DETECT ERROR ================\n\n~ . $response->decoded_content . qq~\n\n============== END DETECT ERROR ==============\n~;
   }
   
@@ -140,15 +173,31 @@ sub detect{ # detect the language of given strings
     print Dumper(\%args, $queryParams, $json);
   }
   
-  return $json; # return our constructed object
+  if(defined($json->{error})){ # if we have an error message, let's make it accessible
+    $self->{error} = $json->{error};
+  }
+  if((defined($json->{data})) && (defined($json->{data}->{detections}))){ # if we have detections, let's return them as an array
+    return @{$json->{data}->{detections}};
+  }else{
+    return undef;
+  }
 }
 
 
 
 
+# *************************************************************************************
+#
+# Usage:
+# my @languageEnum = $translator->getLanguageEnum( target => $targetLanguage );
+#
+# *************************************************************************************
+
 sub getLanguageEnum{
   my $self = shift;
   my %args = @_;
+  
+  $self->{error} = undef; # reset the error object
   
   my $queryParams = {
     key => $self->{key},
@@ -165,7 +214,7 @@ sub getLanguageEnum{
   eval {
     $json = from_json($response->decoded_content);
   };
-  if(($debug) || ($@ ne '') || (defined($json->{error}))){ # in case of error, vomit whatever we got back
+  if(($debug) || ($@ ne '')){ # in case of error, vomit whatever we got back
     warn qq~\n================ LANGUAGE ENUM ERROR ================\n\n~ . $response->decoded_content . qq~\n\n============== END LANGUAGE ENUM ERROR ==============\n~;
   }
   
@@ -173,7 +222,17 @@ sub getLanguageEnum{
     print Dumper(\%args, $queryParams, $json);
   }
   
-  return $json;
+  if(defined($json->{error})){ # if we have an error message, let's make it accessible
+    $self->{error} = $json->{error};
+  }
+  my %languageEnum;
+  if((defined($json->{data})) && (defined($json->{data}->{languages}))){ # if we have languages, let's return them as an array
+    my @languages = @{$json->{data}->{languages}};
+    foreach my $lang (@languages){
+      $languageEnum{$lang->{name}} = $lang->{language};
+    }
+  }
+  return %languageEnum;
 }
 
 
@@ -181,19 +240,24 @@ sub getLanguageEnum{
 
 # utility functions
 sub checkForStrings{ # check to make sure we don't have too many - or too few - strings. Returns undef if GOOD, error object if BAD
-  if((@_ == 0) || (@_ > 128)){ # we'll check to make sure we (a) have something to translate and (b) don't have too much to translate
-    return { # in which case, we'll return a quasi-useful error message.
-      error => {
-        errors => [
-          {
-            domain => "global",
-            reason => "required",
-            message => (@_ == 0) ? INSUFFICIENT_STRINGS_MESSAGE : TOO_MANY_QUERY_STRINGS_MESSAGE
-          }
-        ],
-        code => 400,
-        message => (@_ == 0) ? INSUFFICIENT_STRINGS_MESSAGE : TOO_MANY_QUERY_STRINGS_MESSAGE
-      }
+  my @strings;
+  eval{
+   @strings = @{$_[0]};
+  };
+  if($@ ne ''){
+    @strings = @_;
+  }
+  if((@strings == 0) || (@strings > 128)){ # we'll check to make sure we (a) have something to translate and (b) don't have too much to translate
+    return {
+      errors => [
+        {
+          domain => "global",
+          reason => "required",
+          message => (@_ == 0) ? INSUFFICIENT_STRINGS_MESSAGE : TOO_MANY_QUERY_STRINGS_MESSAGE
+        }
+      ],
+      code => 400,
+      message => (@_ == 0) ? INSUFFICIENT_STRINGS_MESSAGE : TOO_MANY_QUERY_STRINGS_MESSAGE
     }
   }
   return undef;
@@ -202,10 +266,6 @@ sub checkForStrings{ # check to make sure we don't have too many - or too few - 
 sub gtg{ # check to see if a var is "good to go" by checking if it's defined and non-whitespace
   my $v = shift;
   return ((defined($v)) && ($v =~ /\S/)) ? 1 : 0;
-}
-
-sub uriencode{ # return a uriencoded version of the given string
-  return uri_escape_utf8(shift);
 }
 
 return 1;
