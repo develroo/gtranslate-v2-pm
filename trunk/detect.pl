@@ -46,15 +46,13 @@ my $translator = GTranslateV2->new(key => $apiKey); # initialize the translator.
 for (my $i = 0; $i < @stringsToDetect; $i += 128){ # loop through the strings to get them all
   my $endI = (@stringsToDetect - $i > 128) ? $i + 127 : @stringsToDetect-1; # figure out how many 
   my @thisBatch = @stringsToDetect[$i..$endI];
-  my $response = $translator->detect(q => \@thisBatch); # run the translations
-  if(my $err = $response->{error}){ # error handling
+  my @detections = $translator->detect(q => \@thisBatch); # run the translations
+  if(my $err = $translator->{error}){ # error handling
     print qq~Translation Error (~ . $err->{code} . qq~): ~ . $err->{message} . qq~\n~;
     next;
   }
-  my $detections = $response->{data}->{detections}; # get the array of detections.
-  print Dumper $detections;
-  for(my $j = 0; $j < @{$detections}; $j++){ # loop through and print the detected languages
-    my $detection = $detections->[$j]->[0]; # apparently, the big G may return more than one possibility. Haven't seen it, but this is a nested array.
+  for(my $j = 0; $j < @detections; $j++){ # loop through and print the detected languages
+    my $detection = $detections[$j]->[0]; # apparently, the big G may return more than one possibility. Haven't seen it, but this is a nested array.
     print $stringsToDetect[$i + $j] . " -> " . $detection->{language} . " (" . $detection->{confidence} . ")\n";
   }
 }
